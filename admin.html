@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>First Solar - Panel Admin</title>
     <style>
-        /* Design inspiré exactement de vos captures d'écran */
         body { background-color: #050a14; color: white; font-family: sans-serif; margin: 0; padding: 15px; }
         
         .table-container { 
@@ -35,7 +34,6 @@
         
         tbody td { font-size: 0.8em; }
 
-        /* Boutons identiques à l'image */
         .btn { padding: 6px 10px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer; font-size: 0.7em; }
         .btn-paye { background: #3a86ff; color: white; }
         .btn-rejeter { background: #e74c3c; color: white; margin-left: 5px; }
@@ -65,7 +63,7 @@
     </div>
 
     <div class="table-container">
-        <div class="table-header" style="background: #0a1120; padding: 12px; font-weight: bold; color: #5bc0de; border-bottom: 1px solid #1a2a44; font-size: 0.85em;">📩 DEMANDES DE RETRAIT</div>
+        <div class="table-title">📩 DEMANDES DE RETRAIT</div>
         <table>
             <thead>
                 <tr>
@@ -104,8 +102,11 @@
             body.innerHTML += `<tr>
                 <td>${d.telephone}</td>
                 <td class="amt-green">${d.montant} FC</td>
-                <td style="color:#5bc0de">${d.transactionID}</td>
-                <td><button class="btn btn-paye" onclick="validerDepot('${child.key}','${d.telephone}',${d.montant})">Valider</button></td>
+                <td style="color:#5bc0de">${d.transactionID || d.transactionId}</td>
+                <td>
+                    <button class="btn btn-paye" onclick="validerDepot('${child.key}','${d.telephone}',${d.montant})">Valider</button>
+                    <button class="btn btn-rejeter" onclick="rejeterDepot('${child.key}')">Rejeter</button>
+                </td>
             </tr>`;
         });
     });
@@ -128,29 +129,45 @@
         });
     });
 
-    // Fonctions de validation
+    // --- FONCTIONS DE VALIDATION RECHARGE ---
     window.validerDepot = async (id, tel, amt) => {
         if(!confirm("Créditer " + amt + " FC à " + tel + " ?")) return;
-        const uRef = ref(db, 'users/' + tel.replace(/\D/g, ''));
+        const cleanPhone = tel.replace(/\D/g, '');
+        const uRef = ref(db, 'users/' + cleanPhone);
         const s = await get(uRef);
         if(s.exists()) {
-            await update(uRef, { solde: (s.val().solde || 0) + amt });
+            await update(uRef, { solde: (s.val().solde || 0) + parseInt(amt) });
             await remove(ref(db, 'demandes_recharge/' + id));
-            alert("Compte crédité !");
+            alert("Compte crédité avec succès !");
+        } else {
+            alert("Erreur: Utilisateur introuvable (" + cleanPhone + ")");
         }
     };
 
+    window.rejeterDepot = async (id) => {
+        if(confirm("Voulez-vous supprimer cette demande de recharge ?")) {
+            await remove(ref(db, 'demandes_recharge/' + id));
+            alert("Demande de recharge supprimée.");
+        }
+    };
+
+    // --- FONCTIONS DE VALIDATION RETRAIT ---
     window.validerRetrait = async (id) => {
-        if(confirm("Confirmer le paiement ?")) await remove(ref(db, 'demandes_retrait/' + id));
+        if(confirm("Confirmer que vous avez payé l'utilisateur ?")) {
+            await remove(ref(db, 'demandes_retrait/' + id));
+            alert("Retrait marqué comme payé.");
+        }
     };
 
     window.rejeterRetrait = async (id, tel, amt) => {
-        if(confirm("Rejeter et rembourser ?")) {
-            const uRef = ref(db, 'users/' + tel.replace(/\D/g, ''));
+        if(confirm("Rejeter ce retrait et rembourser " + amt + " FC à l'utilisateur ?")) {
+            const cleanPhone = tel.replace(/\D/g, '');
+            const uRef = ref(db, 'users/' + cleanPhone);
             const s = await get(uRef);
             if(s.exists()) {
-                await update(uRef, { solde: (s.val().solde || 0) + amt });
+                await update(uRef, { solde: (s.val().solde || 0) + parseInt(amt) });
                 await remove(ref(db, 'demandes_retrait/' + id));
+                alert("Retrait rejeté et montant remboursé.");
             }
         }
     };
