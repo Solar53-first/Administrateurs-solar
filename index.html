@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>First Solar - Panel Admin</title>
+    <style>
+        /* Design inspiré exactement de vos captures d'écran */
+        body { background-color: #050a14; color: white; font-family: sans-serif; margin: 0; padding: 15px; }
+        
+        .table-container { 
+            background: #0a1120; 
+            border: 1px solid #1a2a44; 
+            border-radius: 8px; 
+            margin-bottom: 25px; 
+            overflow: hidden;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        .table-title { 
+            background: #0a1120; 
+            padding: 12px; 
+            font-weight: bold; 
+            color: #5bc0de; 
+            display: flex;
+            align-items: center;
+            font-size: 0.85em;
+            border-bottom: 1px solid #1a2a44;
+        }
+
+        table { width: 100%; border-collapse: collapse; text-align: center; }
+        
+        thead { background: #3ab0ff; color: #000; font-size: 0.75em; text-transform: uppercase; }
+        th, td { padding: 12px 8px; border-bottom: 1px solid #1a2a44; }
+        
+        tbody td { font-size: 0.8em; }
+
+        /* Boutons identiques à l'image */
+        .btn { padding: 6px 10px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer; font-size: 0.7em; }
+        .btn-paye { background: #3a86ff; color: white; }
+        .btn-rejeter { background: #e74c3c; color: white; margin-left: 5px; }
+        
+        .empty-msg { padding: 30px; color: #445577; font-style: italic; font-size: 0.8em; }
+        .amt-red { color: #ff4d4d; font-weight: bold; }
+        .amt-green { color: #2ecc71; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="table-container">
+        <div class="table-title">📩 DEMANDES DE RECHARGE (DÉPÔTS)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Téléphone</th>
+                    <th>Montant</th>
+                    <th>ID Transaction</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="list-recharges">
+                <tr><td colspan="4" class="empty-msg">Aucune demande de recharge en attente</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="table-container">
+        <div class="table-header" style="background: #0a1120; padding: 12px; font-weight: bold; color: #5bc0de; border-bottom: 1px solid #1a2a44; font-size: 0.85em;">📩 DEMANDES DE RETRAIT</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Téléphone</th>
+                    <th>Montant</th>
+                    <th>Méthode / Numéro</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="list-retraits">
+                <tr><td colspan="4" class="empty-msg">Aucune demande de retrait en attente</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, onValue, get, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "VOTRE_API_KEY",
+        databaseURL: "https://firstsolar-e2ba3-default-rtdb.firebaseio.com",
+        projectId: "firstsolar-e2ba3",
+        appId: "VOTRE_APP_ID"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Charger les Dépôts
+    onValue(ref(db, 'demandes_recharge'), (snap) => {
+        const body = document.getElementById('list-recharges');
+        body.innerHTML = snap.exists() ? "" : '<tr><td colspan="4" class="empty-msg">Aucune demande de recharge en attente</td></tr>';
+        snap.forEach((child) => {
+            const d = child.val();
+            body.innerHTML += `<tr>
+                <td>${d.telephone}</td>
+                <td class="amt-green">${d.montant} FC</td>
+                <td style="color:#5bc0de">${d.transactionID}</td>
+                <td><button class="btn btn-paye" onclick="validerDepot('${child.key}','${d.telephone}',${d.montant})">Valider</button></td>
+            </tr>`;
+        });
+    });
+
+    // Charger les Retraits
+    onValue(ref(db, 'demandes_retrait'), (snap) => {
+        const body = document.getElementById('list-retraits');
+        body.innerHTML = snap.exists() ? "" : '<tr><td colspan="4" class="empty-msg">Aucune demande de retrait en attente</td></tr>';
+        snap.forEach((child) => {
+            const d = child.val();
+            body.innerHTML += `<tr>
+                <td>${d.telephone}</td>
+                <td class="amt-red">${d.montant} FC</td>
+                <td>${d.methode} : ${d.numero_retrait}</td>
+                <td>
+                    <button class="btn btn-paye" onclick="validerRetrait('${child.key}')">Payé</button>
+                    <button class="btn btn-rejeter" onclick="rejeterRetrait('${child.key}','${d.telephone}',${d.montant})">Rejeter</button>
+                </td>
+            </tr>`;
+        });
+    });
+
+    // Fonctions de validation
+    window.validerDepot = async (id, tel, amt) => {
+        if(!confirm("Créditer " + amt + " FC à " + tel + " ?")) return;
+        const uRef = ref(db, 'users/' + tel.replace(/\D/g, ''));
+        const s = await get(uRef);
+        if(s.exists()) {
+            await update(uRef, { solde: (s.val().solde || 0) + amt });
+            await remove(ref(db, 'demandes_recharge/' + id));
+            alert("Compte crédité !");
+        }
+    };
+
+    window.validerRetrait = async (id) => {
+        if(confirm("Confirmer le paiement ?")) await remove(ref(db, 'demandes_retrait/' + id));
+    };
+
+    window.rejeterRetrait = async (id, tel, amt) => {
+        if(confirm("Rejeter et rembourser ?")) {
+            const uRef = ref(db, 'users/' + tel.replace(/\D/g, ''));
+            const s = await get(uRef);
+            if(s.exists()) {
+                await update(uRef, { solde: (s.val().solde || 0) + amt });
+                await remove(ref(db, 'demandes_retrait/' + id));
+            }
+        }
+    };
+</script>
+</body>
+</html>
