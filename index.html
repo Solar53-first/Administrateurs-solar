@@ -6,38 +6,15 @@
     <title>First Solar - Panel Admin</title>
     <style>
         body { background-color: #050a14; color: white; font-family: sans-serif; margin: 0; padding: 15px; }
-        
-        .table-container { 
-            background: #0a1120; 
-            border: 1px solid #1a2a44; 
-            border-radius: 8px; 
-            margin-bottom: 25px; 
-            overflow: hidden;
-            box-shadow: 0 0 15px rgba(0,0,0,0.5);
-        }
-
-        .table-title { 
-            background: #0a1120; 
-            padding: 12px; 
-            font-weight: bold; 
-            color: #5bc0de; 
-            display: flex;
-            align-items: center;
-            font-size: 0.85em;
-            border-bottom: 1px solid #1a2a44;
-        }
-
+        .table-container { background: #0a1120; border: 1px solid #1a2a44; border-radius: 8px; margin-bottom: 25px; overflow: hidden; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+        .table-title { background: #0a1120; padding: 12px; font-weight: bold; color: #5bc0de; display: flex; align-items: center; font-size: 0.85em; border-bottom: 1px solid #1a2a44; }
         table { width: 100%; border-collapse: collapse; text-align: center; }
-        
         thead { background: #3ab0ff; color: #000; font-size: 0.75em; text-transform: uppercase; }
         th, td { padding: 12px 8px; border-bottom: 1px solid #1a2a44; }
-        
         tbody td { font-size: 0.8em; }
-
         .btn { padding: 6px 10px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer; font-size: 0.7em; }
         .btn-paye { background: #3a86ff; color: white; }
         .btn-rejeter { background: #e74c3c; color: white; margin-left: 5px; }
-        
         .empty-msg { padding: 30px; color: #445577; font-style: italic; font-size: 0.8em; }
         .amt-red { color: #ff4d4d; font-weight: bold; }
         .amt-green { color: #2ecc71; font-weight: bold; }
@@ -93,31 +70,42 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Charger les Dépôts
+    // --- CHARGEMENT TEMPS RÉEL DES DÉPÔTS ---
     onValue(ref(db, 'demandes_recharge'), (snap) => {
         const body = document.getElementById('list-recharges');
-        body.innerHTML = snap.exists() ? "" : '<tr><td colspan="4" class="empty-msg">Aucune demande de recharge en attente</td></tr>';
+        body.innerHTML = "";
+        if (!snap.exists()) {
+            body.innerHTML = '<tr><td colspan="4" class="empty-msg">Aucune demande de recharge en attente</td></tr>';
+            return;
+        }
         snap.forEach((child) => {
             const d = child.val();
-            body.innerHTML += `<tr>
+            const row = document.createElement('tr');
+            row.innerHTML = `
                 <td>${d.telephone}</td>
                 <td class="amt-green">${d.montant} FC</td>
-                <td style="color:#5bc0de">${d.transactionID || d.transactionId}</td>
+                <td style="color:#5bc0de">${d.transactionID || d.transactionId || 'N/A'}</td>
                 <td>
                     <button class="btn btn-paye" onclick="validerDepot('${child.key}','${d.telephone}',${d.montant})">Valider</button>
                     <button class="btn btn-rejeter" onclick="rejeterDepot('${child.key}')">Rejeter</button>
                 </td>
-            </tr>`;
+            `;
+            body.appendChild(row);
         });
     });
 
-    // Charger les Retraits
+    // --- CHARGEMENT TEMPS RÉEL DES RETRAITS ---
     onValue(ref(db, 'demandes_retrait'), (snap) => {
         const body = document.getElementById('list-retraits');
-        body.innerHTML = snap.exists() ? "" : '<tr><td colspan="4" class="empty-msg">Aucune demande de retrait en attente</td></tr>';
+        body.innerHTML = "";
+        if (!snap.exists()) {
+            body.innerHTML = '<tr><td colspan="4" class="empty-msg">Aucune demande de retrait en attente</td></tr>';
+            return;
+        }
         snap.forEach((child) => {
             const d = child.val();
-            body.innerHTML += `<tr>
+            const row = document.createElement('tr');
+            row.innerHTML = `
                 <td>${d.telephone}</td>
                 <td class="amt-red">${d.montant} FC</td>
                 <td>${d.methode} : ${d.numero_retrait}</td>
@@ -125,49 +113,67 @@
                     <button class="btn btn-paye" onclick="validerRetrait('${child.key}')">Payé</button>
                     <button class="btn btn-rejeter" onclick="rejeterRetrait('${child.key}','${d.telephone}',${d.montant})">Rejeter</button>
                 </td>
-            </tr>`;
+            `;
+            body.appendChild(row);
         });
     });
 
-    // --- FONCTIONS DE VALIDATION RECHARGE ---
+    // --- LOGIQUE DE VALIDATION DÉPÔT (RECHARGE) ---
     window.validerDepot = async (id, tel, amt) => {
-        if(!confirm("Créditer " + amt + " FC à " + tel + " ?")) return;
+        if(!confirm("Confirmer la recharge de " + amt + " FC pour le +" + tel + " ?")) return;
+        
+        // Nettoyage du téléphone pour correspondre à la clé Firebase
         const cleanPhone = tel.replace(/\D/g, '');
         const uRef = ref(db, 'users/' + cleanPhone);
-        const s = await get(uRef);
-        if(s.exists()) {
-            await update(uRef, { solde: (s.val().solde || 0) + parseInt(amt) });
-            await remove(ref(db, 'demandes_recharge/' + id));
-            alert("Compte crédité avec succès !");
-        } else {
-            alert("Erreur: Utilisateur introuvable (" + cleanPhone + ")");
+        
+        try {
+            const s = await get(uRef);
+            if(s.exists()) {
+                const actuelSolde = parseInt(s.val().solde || 0);
+                const nouveauSolde = actuelSolde + parseInt(amt);
+                
+                // 1. Mettre à jour le solde de l'utilisateur
+                await update(uRef, { solde: nouveauSolde });
+                
+                // 2. Supprimer la demande de la liste ADMIN immédiatement
+                await remove(ref(db, 'demandes_recharge/' + id));
+                
+                alert("SUCCÈS : Le solde de l'utilisateur a été mis à jour (" + nouveauSolde + " FC).");
+            } else {
+                alert("ERREUR : L'utilisateur +" + cleanPhone + " n'existe pas dans la base.");
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Une erreur est survenue lors de la validation.");
         }
     };
 
+    // --- LOGIQUE DE REJET DÉPÔT ---
     window.rejeterDepot = async (id) => {
-        if(confirm("Voulez-vous supprimer cette demande de recharge ?")) {
+        if(confirm("Supprimer définitivement cette demande sans créditer le compte ?")) {
             await remove(ref(db, 'demandes_recharge/' + id));
-            alert("Demande de recharge supprimée.");
+            alert("Demande rejetée et effacée.");
         }
     };
 
-    // --- FONCTIONS DE VALIDATION RETRAIT ---
+    // --- LOGIQUE DE VALIDATION RETRAIT ---
     window.validerRetrait = async (id) => {
-        if(confirm("Confirmer que vous avez payé l'utilisateur ?")) {
+        if(confirm("Confirmer que le paiement mobile a été envoyé ?")) {
             await remove(ref(db, 'demandes_retrait/' + id));
-            alert("Retrait marqué comme payé.");
+            alert("Retrait validé et retiré de la liste.");
         }
     };
 
+    // --- LOGIQUE DE REJET RETRAIT (REMBOURSEMENT) ---
     window.rejeterRetrait = async (id, tel, amt) => {
-        if(confirm("Rejeter ce retrait et rembourser " + amt + " FC à l'utilisateur ?")) {
-            const cleanPhone = tel.replace(/\D/g, '');
+        const cleanPhone = tel.replace(/\D/g, '');
+        if(confirm("Rejeter ce retrait ? Le montant de " + amt + " FC sera retourné au client.")) {
             const uRef = ref(db, 'users/' + cleanPhone);
             const s = await get(uRef);
             if(s.exists()) {
                 await update(uRef, { solde: (s.val().solde || 0) + parseInt(amt) });
                 await remove(ref(db, 'demandes_retrait/' + id));
-                alert("Retrait rejeté et montant remboursé.");
+                alert("Retrait annulé. Utilisateur remboursé.");
             }
         }
     };
