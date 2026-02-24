@@ -5,37 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>First Solar - Panel Admin</title>
     <style>
-        body { background-color: #050a14; color: white; font-family: sans-serif; margin: 0; padding: 15px; }
-        .table-container { background: #0a1120; border: 1px solid #1a2a44; border-radius: 8px; margin-bottom: 25px; overflow: hidden; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
-        .table-title { background: #0a1120; padding: 12px; font-weight: bold; color: #5bc0de; display: flex; align-items: center; font-size: 0.85em; border-bottom: 1px solid #1a2a44; }
-        table { width: 100%; border-collapse: collapse; text-align: center; }
-        thead { background: #3ab0ff; color: #000; font-size: 0.75em; text-transform: uppercase; }
-        th, td { padding: 12px 8px; border-bottom: 1px solid #1a2a44; }
-        tbody td { font-size: 0.8em; }
-        .btn { padding: 6px 10px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer; font-size: 0.7em; }
+        body { background-color: #050a14; color: white; font-family: sans-serif; margin: 0; padding: 10px; }
+        .table-container { background: #0a1120; border: 1px solid #1a2a44; border-radius: 8px; margin-bottom: 20px; overflow-x: auto; }
+        .table-title { background: #16243d; padding: 12px; font-weight: bold; color: #3ab0ff; font-size: 0.8em; border-bottom: 1px solid #1a2a44; }
+        table { width: 100%; border-collapse: collapse; min-width: 400px; }
+        thead { background: #3ab0ff; color: #000; font-size: 0.7em; }
+        th, td { padding: 10px 5px; border-bottom: 1px solid #1a2a44; text-align: center; }
+        tbody td { font-size: 0.75em; }
+        .btn { padding: 8px 12px; border-radius: 4px; border: none; font-weight: bold; cursor: pointer; font-size: 0.7em; display: inline-block; }
         .btn-paye { background: #3a86ff; color: white; }
-        .btn-rejeter { background: #e74c3c; color: white; margin-left: 5px; }
-        .empty-msg { padding: 30px; color: #445577; font-style: italic; font-size: 0.8em; }
-        .amt-red { color: #ff4d4d; font-weight: bold; }
+        .btn-rejeter { background: #e74c3c; color: white; margin-left: 2px; }
         .amt-green { color: #2ecc71; font-weight: bold; }
+        .amt-red { color: #ff4d4d; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="table-container">
-        <div class="table-title">📩 DEMANDES DE RECHARGE (DÉPÔTS)</div>
+        <div class="table-title">📩 DEMANDES DE RECHARGE</div>
         <table>
             <thead>
                 <tr>
-                    <th>Téléphone</th>
-                    <th>Montant</th>
-                    <th>ID Transaction</th>
-                    <th>Action</th>
+                    <th>TEL</th>
+                    <th>MONTANT</th>
+                    <th>ID TRANS.</th>
+                    <th>ACTION</th>
                 </tr>
             </thead>
-            <tbody id="list-recharges">
-                <tr><td colspan="4" class="empty-msg">Aucune demande de recharge en attente</td></tr>
-            </tbody>
+            <tbody id="list-recharges"></tbody>
         </table>
     </div>
 
@@ -44,15 +41,13 @@
         <table>
             <thead>
                 <tr>
-                    <th>Téléphone</th>
-                    <th>Montant</th>
-                    <th>Méthode / Numéro</th>
-                    <th>Action</th>
+                    <th>TEL</th>
+                    <th>MONTANT</th>
+                    <th>MÉTHODE</th>
+                    <th>ACTION</th>
                 </tr>
             </thead>
-            <tbody id="list-retraits">
-                <tr><td colspan="4" class="empty-msg">Aucune demande de retrait en attente</td></tr>
-            </tbody>
+            <tbody id="list-retraits"></tbody>
         </table>
     </div>
 
@@ -70,12 +65,12 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // --- CHARGEMENT TEMPS RÉEL DES DÉPÔTS ---
+    // --- RECHARGES ---
     onValue(ref(db, 'demandes_recharge'), (snap) => {
         const body = document.getElementById('list-recharges');
         body.innerHTML = "";
         if (!snap.exists()) {
-            body.innerHTML = '<tr><td colspan="4" class="empty-msg">Aucune demande de recharge en attente</td></tr>';
+            body.innerHTML = '<tr><td colspan="4">Aucun dépôt</td></tr>';
             return;
         }
         snap.forEach((child) => {
@@ -84,22 +79,22 @@
             row.innerHTML = `
                 <td>${d.telephone}</td>
                 <td class="amt-green">${d.montant} FC</td>
-                <td style="color:#5bc0de">${d.transactionID || d.transactionId || 'N/A'}</td>
+                <td style="color:#5bc0de; max-width:80px; overflow:hidden;">${d.transactionID || d.transactionId || 'Id'}</td>
                 <td>
-                    <button class="btn btn-paye" onclick="validerDepot('${child.key}','${d.telephone}',${d.montant})">Valider</button>
-                    <button class="btn btn-rejeter" onclick="rejeterDepot('${child.key}')">Rejeter</button>
+                    <button class="btn btn-paye" onclick="window.validerDepot('${child.key}','${d.telephone}',${d.montant})">V</button>
+                    <button class="btn btn-rejeter" onclick="window.rejeterDepot('${child.key}')">X</button>
                 </td>
             `;
             body.appendChild(row);
         });
     });
 
-    // --- CHARGEMENT TEMPS RÉEL DES RETRAITS ---
+    // --- RETRAITS ---
     onValue(ref(db, 'demandes_retrait'), (snap) => {
         const body = document.getElementById('list-retraits');
         body.innerHTML = "";
         if (!snap.exists()) {
-            body.innerHTML = '<tr><td colspan="4" class="empty-msg">Aucune demande de retrait en attente</td></tr>';
+            body.innerHTML = '<tr><td colspan="4">Aucun retrait</td></tr>';
             return;
         }
         snap.forEach((child) => {
@@ -108,72 +103,46 @@
             row.innerHTML = `
                 <td>${d.telephone}</td>
                 <td class="amt-red">${d.montant} FC</td>
-                <td>${d.methode} : ${d.numero_retrait}</td>
+                <td>${d.methode || 'Mobile'}</td>
                 <td>
-                    <button class="btn btn-paye" onclick="validerRetrait('${child.key}')">Payé</button>
-                    <button class="btn btn-rejeter" onclick="rejeterRetrait('${child.key}','${d.telephone}',${d.montant})">Rejeter</button>
+                    <button class="btn btn-paye" onclick="window.validerRetrait('${child.key}')">Payer</button>
+                    <button class="btn btn-rejeter" onclick="window.rejeterRetrait('${child.key}','${d.telephone}',${d.montant})">R</button>
                 </td>
             `;
             body.appendChild(row);
         });
     });
 
-    // --- LOGIQUE DE VALIDATION DÉPÔT (RECHARGE) ---
+    // --- FONCTIONS GLOBALISÉES ---
     window.validerDepot = async (id, tel, amt) => {
-        if(!confirm("Confirmer la recharge de " + amt + " FC pour le +" + tel + " ?")) return;
-        
-        // Nettoyage du téléphone pour correspondre à la clé Firebase
+        if(!confirm("Valider " + amt + " FC pour " + tel + " ?")) return;
         const cleanPhone = tel.replace(/\D/g, '');
         const uRef = ref(db, 'users/' + cleanPhone);
-        
-        try {
-            const s = await get(uRef);
-            if(s.exists()) {
-                const actuelSolde = parseInt(s.val().solde || 0);
-                const nouveauSolde = actuelSolde + parseInt(amt);
-                
-                // 1. Mettre à jour le solde de l'utilisateur
-                await update(uRef, { solde: nouveauSolde });
-                
-                // 2. Supprimer la demande de la liste ADMIN immédiatement
-                await remove(ref(db, 'demandes_recharge/' + id));
-                
-                alert("SUCCÈS : Le solde de l'utilisateur a été mis à jour (" + nouveauSolde + " FC).");
-            } else {
-                alert("ERREUR : L'utilisateur +" + cleanPhone + " n'existe pas dans la base.");
-            }
-        } catch (error) {
-            console.error(error);
-            alert("Une erreur est survenue lors de la validation.");
-        }
-    };
-
-    // --- LOGIQUE DE REJET DÉPÔT ---
-    window.rejeterDepot = async (id) => {
-        if(confirm("Supprimer définitivement cette demande sans créditer le compte ?")) {
+        const s = await get(uRef);
+        if(s.exists()){
+            const nouveau = (parseInt(s.val().solde) || 0) + parseInt(amt);
+            await update(uRef, { solde: nouveau });
             await remove(ref(db, 'demandes_recharge/' + id));
-            alert("Demande rejetée et effacée.");
-        }
+            alert("Compte crédité !");
+        } else { alert("Utilisateur introuvable"); }
     };
 
-    // --- LOGIQUE DE VALIDATION RETRAIT ---
+    window.rejeterDepot = async (id) => {
+        if(confirm("Supprimer ?")) await remove(ref(db, 'demandes_recharge/' + id));
+    };
+
     window.validerRetrait = async (id) => {
-        if(confirm("Confirmer que le paiement mobile a été envoyé ?")) {
-            await remove(ref(db, 'demandes_retrait/' + id));
-            alert("Retrait validé et retiré de la liste.");
-        }
+        if(confirm("Marquer comme payé ?")) await remove(ref(db, 'demandes_retrait/' + id));
     };
 
-    // --- LOGIQUE DE REJET RETRAIT (REMBOURSEMENT) ---
     window.rejeterRetrait = async (id, tel, amt) => {
-        const cleanPhone = tel.replace(/\D/g, '');
-        if(confirm("Rejeter ce retrait ? Le montant de " + amt + " FC sera retourné au client.")) {
+        if(confirm("Rembourser " + amt + " FC ?")){
+            const cleanPhone = tel.replace(/\D/g, '');
             const uRef = ref(db, 'users/' + cleanPhone);
             const s = await get(uRef);
-            if(s.exists()) {
+            if(s.exists()){
                 await update(uRef, { solde: (s.val().solde || 0) + parseInt(amt) });
                 await remove(ref(db, 'demandes_retrait/' + id));
-                alert("Retrait annulé. Utilisateur remboursé.");
             }
         }
     };
